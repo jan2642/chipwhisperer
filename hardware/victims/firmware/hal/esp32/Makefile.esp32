@@ -1,0 +1,34 @@
+VPATH += :$(HALPATH)/esp32
+SRC += startup_esp32.c esp32_hal.c
+
+CC = xtensa-esp32-elf-gcc
+OBJCOPY = xtensa-esp32-elf-objcopy
+OBJDUMP = xtensa-esp32-elf-objdump
+SIZE = xtensa-esp32-elf-size
+AR = xtensa-esp32-elf-ar rcs
+NM = xtensa-esp32-elf-nm
+
+FORMAT = binary
+
+CFLAGS += -fdata-sections -ffunction-sections -g3 -Wall -pipe
+CFLAGS += -mtext-section-literals -fstrict-volatile-bitfields
+CFLAGS += -fno-strict-aliasing -Wall -Wstrict-prototypes -Wmissing-prototypes -Wchar-subscripts
+CFLAGS += -Wcomment -Wformat=2 --param max-inline-insns-single=500
+CFLAGS += -DDEBUG
+CFLAGS += -funsigned-char -funsigned-bitfields -fshort-enums -nostdlib
+CPPFLAGS += $(CFLAGS)
+
+CPPDEFS += $(CDEFS)
+
+LDFLAGS += -nostdlib -T $(HALPATH)/esp32/esp32.ld -Wl,--gc-sections
+LDFLAGS += -Wl,-Map=$(TARGET).map,--cref
+LDFLAGS += $(EXTMEMOPTS)
+LDFLAGS += $(patsubst %,-L%,$(EXTRALIBDIRS))
+LDFLAGS += $(PRINTF_LIB) $(SCANF_LIB)
+LDFLAGS += -lm -lc -lgcc
+ASFLAGS += -c -O0 -Wall -fmessage-length=0
+ASFLAGS += -mlongcalls -mtext-section-literals -fstrict-volatile-bitfields
+
+# Trick to generate a flashable .bin file after the build
+ELFSIZE = xtensa-esp32-elf-size $(TARGET-PLAT).elf ; esptool.py --chip esp32 elf2image --flash_mode="dio" --flash_freq "40m" --flash_size "4MB" -o $(TARGET-PLAT).bin $(TARGET-PLAT).elf
+

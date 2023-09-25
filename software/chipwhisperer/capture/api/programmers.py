@@ -17,8 +17,10 @@ from chipwhisperer.hardware.naeusb.programmer_avr import supported_avr
 from chipwhisperer.hardware.naeusb.programmer_xmega import supported_xmega
 from chipwhisperer.hardware.naeusb.programmer_stm32fserial import supported_stm32f
 from chipwhisperer.hardware.naeusb.programmer_neorv32 import Neorv32Programmer
+from chipwhisperer.hardware.naeusb.programmer_esp32 import Esp32Programmer
 import time
 from ..utils.IntelHex import IntelHex
+from pathlib import Path
 
 from functools import wraps
 
@@ -445,3 +447,57 @@ class STM32FProgrammer(Programmer):
         stm32f = self.stm32prog()
         stm32f.close_port()
         stm32f.releaseChip()
+
+
+class ESP32Programmer(Programmer):
+    def __init__(self):
+        super().__init__()
+        self.prog = None
+        self.scope : ScopeTypes = None
+
+    def reset(self, bootmode = True):
+        self.scope.io.tio3 = bootmode
+        self.scope.io.pdic = False # SPI Buffer
+        self.scope.io.nrst = 0
+        time.sleep(0.5)
+        self.scope.io.nrst = None
+        time.sleep(0.5)
+
+    @save_and_restore_pins
+    def find(self, power_cycle=True):
+        if (self.scope.io.tio1, self.scope.io.tio2) != ("serial_rx", "serial_tx"):
+            target_logger.warning("Serial pins incorrect for NewAE ESP32 target")
+            target_logger.warning("(tio1, tio2) != ('serial_rx', 'serial_tx')")
+
+        # A clock frequency of 26 MHz is needed to have the rom bootloader work at 115200 baud
+        self.clkgen_freq = self.scope.clock.clkgen_freq
+        self.scope.clock.clkgen_freq = 26E6
+
+        self.esp32 = Esp32Programmer(self.scope)
+        self.reset(False)
+        # TODO: esptool.py chip_id ?
+
+    @save_and_restore_pins
+    def erase(self):
+        target_logger.info("Erasing firmware")
+        self.reset(False)
+        # TODO: esptool.py erase_flash or erase_region --> remove the bootloader
+        target_logger.info("Done!")
+
+    @save_and_restore_pins
+    def program(self, filename : str, memtype="flash", verify=True):
+        # TODO: Need the correct .bin file, not the .hex file
+        # TODO: Find another way to hack Makefile.esp32 to generate the elf2bin file before the .hex ?
+        file = str(Path(filename).with_suffix('.bin'))
+
+        target_logger.info("Programming...")
+        self.reset(False)
+        self.esp32.program(file)
+        # TODO: map 'verify' argument to esptool.py arguments
+        # TODO: alternatively, use read_flash to read the data back for verification
+        target_logger.info("Done!")
+
+    def close(self, reset=True):
+        # restore clock frequency
+        self.scope.clock.clkgen_freq = self.clkgen_freq
+        self.reset()

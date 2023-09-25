@@ -160,6 +160,8 @@ void platform_init(void);
     #include "sam4s/sam4s_hal.h"
 #elif HAL_TYPE == HAL_ibex
     #include "ibex/ibex_hal.h"
+#elif HAL_TYPE == HAL_esp32
+    #include "esp32/esp32_hal.h"
 #else
     #error "Unsupported HAL Type"
 #endif
